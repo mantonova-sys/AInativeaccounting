@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pathway Planner</title>
+<meta name="description" content="Build a personalized, term-by-term academic roadmap and download it as an Excel schedule.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+<script>document.documentElement.classList.add("js");</script>
+<style>
+/* Layout: utility bar, white header with a thin progress rail, then either a full-width crimson hero (landing) or a single centered form column (wizard and results). Typography carries the personality: serif headlines whose words fade in, plus rotating phrases. */
+:root {
+  --red: #a6212d;
+  --red-dark: #7f1822;
+  --red-tint: #f8e9ea;
+  --ink: #231f20;
+  --ink-soft: #5d5658;
+  --paper: #ffffff;
+  --stone: #f5f2ee;
+  --line: #ddd6d0;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 17px; line-height: 1.6; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+p { margin: 0; }
+a { color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
+.wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding-inline: max(20px, 4vw); }
+.narrow { max-width: 860px; }
+
+/* Utility bar and header */
+.util { background: var(--ink); color: #d9d3d0; font-size: .8rem; }
+.util .wrap { display: flex; justify-content: space-between; gap: 16px; padding-block: 8px; flex-wrap: wrap; }
+.util a { text-decoration: none; margin-left: 20px; }
+.util a:hover { color: #fff; text-decoration: underline; }
+header.main { background: var(--paper); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+header.main .wrap { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 16px; }
+.brand { font-family: var(--serif); font-size: 1.55rem; font-weight: 700; letter-spacing: .02em; text-decoration: none; color: var(--red); line-height: 1; }
+.brand small { display: block; font-family: var(--sans); font-size: .66rem; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-soft); margin-top: 5px; }
+nav.links { display: flex; align-items: center; gap: 28px; font-weight: 600; font-size: .92rem; }
+nav.links a { text-decoration: none; padding-block: 6px; border-bottom: 2px solid transparent; }
+nav.links a:hover { border-color: var(--red); }
+.rail { display: none; background: var(--stone); border-bottom: 1px solid var(--line); }
+.rail.on { display: block; }
+.rail .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; font-size: .82rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+.rail .bar { flex: 1; height: 4px; background: var(--line); }
+.rail .bar i { display: block; height: 100%; width: 0; background: var(--red); transition: width .6s ease; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--red); background: var(--red); color: #fff; cursor: pointer;
+  padding: 14px 28px; border-radius: 2px; font-weight: 700; font-size: .9rem; letter-spacing: .08em; text-transform: uppercase; text-decoration: none; transition: background .2s, color .2s, transform .2s; }
+.btn:hover { background: var(--red-dark); border-color: var(--red-dark); transform: translateY(-1px); }
+.btn.ghost { background: transparent; color: var(--red); }
+.btn.ghost:hover { background: var(--red-tint); }
+.btn.light { background: #fff; border-color: #fff; color: var(--red); }
+.btn.light:hover { background: var(--red-tint); border-color: var(--red-tint); }
+.btn.small { padding: 10px 18px; font-size: .78rem; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; transform: none; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+/* Fading words */
+.fade { opacity: 0; transition: opacity .7s ease; }
+.fade.in { opacity: 1; }
+.w { display: inline-block; opacity: 0; transform: translateY(.35em); animation: wIn .8s cubic-bezier(.2,.7,.2,1) forwards; animation-delay: calc(var(--i, 0) * 80ms + 120ms); }
+@keyframes wIn { to { opacity: 1; transform: none; } }
+.js .reveal { opacity: 0; transform: translateY(18px); transition: opacity .9s ease, transform .9s ease; }
+.js .reveal.seen { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .w { animation: none; opacity: 1; transform: none; }
+  .fade, .js .reveal { transition: none; opacity: 1; transform: none; }
+  .rail .bar i, .btn { transition: none; }
+  .sweep i { animation: none; }
+}
+
+/* Landing hero */
+.hero { background: var(--red); color: #fff; }
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 56px; align-items: center; padding-block: clamp(48px, 9vw, 104px); }
+.kicker { font-size: .78rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; opacity: .85; }
+.hero h1 { font-size: clamp(2.6rem, 7vw, 5rem); margin-block: 18px 0; }
+.hero .rotor { display: block; min-height: 1.15em; color: #ffd9dc; font-style: italic; font-weight: 400; }
+.hero .line { margin-block: 26px 32px; font-size: clamp(1.1rem, 2vw, 1.35rem); min-height: 3.4em; max-width: 30em; opacity: 0; }
+.hero .line.in { opacity: .95; }
+.peek { background: #fff; color: var(--ink); padding: 28px; border-radius: 2px; box-shadow: 0 24px 60px rgba(0,0,0,.28); }
+.peek .tag { font-size: .72rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); display: flex; justify-content: space-between; gap: 12px; }
+.peek h3 { font-size: 1.5rem; margin-block: 8px 14px; color: var(--red); }
+.peek ul { list-style: none; margin: 0; padding: 0; }
+.peek li { display: flex; justify-content: space-between; gap: 16px; padding: 11px 0; border-top: 1px solid var(--line); font-size: .95rem; }
+.peek li b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.peek .foot { margin-top: 12px; padding-top: 12px; border-top: 2px solid var(--ink); display: flex; justify-content: space-between; font-weight: 700; font-size: .9rem; }
+
+/* Landing sections */
+.section { padding-block: clamp(48px, 8vw, 88px); }
+.section.stone { background: var(--stone); }
+.section h2 { font-size: clamp(1.9rem, 4.2vw, 2.9rem); max-width: 18em; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 40px; border-top: 2px solid var(--ink); }
+.steps > div { padding: 24px 28px 8px 0; }
+.steps > div + div { padding-left: 28px; border-left: 1px solid var(--line); }
+.steps .n { font-family: var(--serif); font-size: 2.6rem; color: var(--red); line-height: 1; font-variant-numeric: lining-nums; }
+.steps h3 { font-size: 1.35rem; margin-block: 10px 8px; }
+.steps p { color: var(--ink-soft); font-size: .98rem; }
+.quote { background: var(--ink); color: #fff; text-align: center; }
+.quote .wrap { padding-block: clamp(56px, 10vw, 110px); }
+.quote p { font-family: var(--serif); font-size: clamp(1.7rem, 4.6vw, 3.1rem); line-height: 1.2; min-height: 3.6em; max-width: 20em; margin-inline: auto; display: flex; align-items: center; justify-content: center; text-wrap: balance; }
+.fine { font-size: .88rem; color: var(--ink-soft); }
+.fine.on-red { color: #fff; opacity: .8; max-width: 38em; }
+
+/* Wizard + results */
+.screen { padding-block: clamp(32px, 6vw, 64px) clamp(48px, 8vw, 96px); }
+.card { background: var(--paper); border: 1px solid var(--line); padding: clamp(22px, 4vw, 48px); }
+.eyebrow { font-size: .76rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--red); }
+.card h2 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); margin-block: 10px 12px; }
+.sub { color: var(--ink-soft); margin-bottom: 26px; max-width: 40em; }
+.sentence { font-family: var(--serif); font-size: clamp(1.4rem, 3.4vw, 2rem); line-height: 2.2; }
+.sentence input { font-family: var(--serif); font-size: inherit; background: transparent; border: 0; border-bottom: 2px solid var(--ink); border-radius: 0; padding: 0 6px; min-width: 9ch; max-width: 100%; color: var(--red); font-weight: 600; }
+.sentence input::placeholder { color: #aaa2a0; font-weight: 400; }
+.sentence input:focus { outline: none; border-color: var(--red); background: var(--red-tint); }
+.sentence input.bad { border-color: #d0021b; background: #fdeced; }
+.w-name { width: 12ch; } .w-uni { width: min(100%, 24ch); } .w-major { width: min(100%, 22ch); } .w-minor { width: min(100%, 16ch); }
+.msg { min-height: 1.5em; margin-top: 14px; font-size: .95rem; font-weight: 600; color: #b3201f; }
+.banner { background: var(--stone); border-left: 4px solid var(--red); padding: 12px 16px; font-size: .95rem; margin-top: 16px; }
+.banner[hidden] { display: none; }
+.actions { margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.lbl { font-weight: 700; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; margin-top: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-block: 10px 24px; }
+.tiles.big { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.tile { position: relative; }
+.tile input { position: absolute; opacity: 0; inset: 0; cursor: pointer; margin: 0; }
+.tile label { display: block; height: 100%; padding: 16px 18px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; font-family: var(--serif); font-weight: 600; font-size: 1.1rem; transition: all .2s; }
+.tile label small { display: block; font-family: var(--sans); font-weight: 400; color: var(--ink-soft); font-size: .88rem; margin-top: 3px; }
+.tile:hover label { border-color: var(--ink); }
+.tile input:checked + label { border-color: var(--red); background: var(--red-tint); box-shadow: inset 0 0 0 1px var(--red); }
+.tile input:focus-visible + label { outline: 3px solid var(--red); outline-offset: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px 14px; }
+.chip { padding: 6px 14px; border: 1px solid var(--ink); font-size: .85rem; font-weight: 600; }
+.field { display: grid; gap: 6px; margin-bottom: 20px; max-width: 420px; }
+.field label { font-weight: 700; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; }
+.field input, .field select { border: 1px solid var(--ink); border-radius: 0; padding: 11px 14px; background: var(--paper); }
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 8px; margin-block: 10px 22px; }
+.checks label { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); cursor: pointer; font-size: .95rem; }
+.checks label:hover { border-color: var(--ink); }
+.checks input { margin-top: 5px; accent-color: var(--red); width: 18px; height: 18px; flex: none; }
+.checks small { display: block; color: var(--ink-soft); }
+.group { font-family: var(--serif); font-size: 1.25rem; font-weight: 600; margin-top: 14px; }
+
+/* Loading */
+.loading { text-align: center; min-height: 52vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+.loading h2 { font-size: clamp(1.8rem, 4.6vw, 3rem); max-width: 18em; min-height: 2.5em; display: flex; align-items: center; justify-content: center; }
+.sweep { width: min(320px, 70%); height: 4px; background: var(--line); overflow: hidden; }
+.sweep i { display: block; width: 40%; height: 100%; background: var(--red); animation: sweep 1.3s ease-in-out infinite; }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+
+/* Results */
+.celebrate { background: var(--red); color: #fff; padding: clamp(36px, 7vw, 72px) clamp(22px, 5vw, 64px); margin: calc(-1 * clamp(22px, 4vw, 48px)); margin-bottom: 36px; }
+.celebrate .eyebrow { color: #ffd9dc; }
+.celebrate h1 { font-size: clamp(2.4rem, 7vw, 4.6rem); margin-block: 12px 20px; }
+.cheer { font-family: var(--serif); font-style: italic; font-size: clamp(1.3rem, 3vw, 2rem); min-height: 3.2em; max-width: 24em; }
+.summary { font-size: 1.1rem; max-width: 42em; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border-top: 2px solid var(--ink); margin-block: 8px 28px; }
+.stat { padding: 18px 20px 14px 0; }
+.stat + .stat { padding-left: 20px; border-left: 1px solid var(--line); }
+.stat b { display: block; font-family: var(--serif); font-size: 2.1rem; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--red); }
+.stat span { font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--ink-soft); }
+.todo { background: var(--stone); border-left: 4px solid var(--red); padding: 18px 22px; margin-block: 8px 28px; }
+.todo h3 { font-size: 1.2rem; margin-bottom: 8px; }
+.todo ul { margin: 0; padding-left: 20px; font-size: .95rem; }
+.todo li + li { margin-top: 4px; }
+.plan { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; margin-top: 28px; }
+.term { border: 1px solid var(--line); padding: 18px; min-width: 0; background: var(--paper); }
+.term h3 { font-size: 1.15rem; }
+.term .tot { font-size: .76rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin: 4px 0 12px; }
+.term ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.term li { padding: 8px 10px; font-size: .92rem; line-height: 1.3; }
+.term li b { font-weight: 700; }
+.term li span { color: var(--ink-soft); font-size: .8rem; display: block; margin-top: 2px; }
+.c-Major { background: #e6edf5; } .c-Pre { background: #f0f3f8; } .c-Elec { background: #f6ecc9; } .c-Minor { background: #f9e1d3; } .c-Core { background: #e4ecdb; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .84rem; font-weight: 600; margin-top: 18px; }
+.legend i { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border: 1px solid var(--line); }
+#roadmap[hidden] { display: none; }
+
+footer { background: var(--ink); color: #cfc8c5; font-size: .86rem; }
+footer .wrap { padding-block: 36px; display: grid; gap: 8px; }
+footer b { color: #fff; font-family: var(--serif); font-size: 1.15rem; }
+
+@media (max-width: 820px) {
+  .hero .wrap { grid-template-columns: 1fr; gap: 36px; }
+  .steps { grid-template-columns: 1fr; }
+  .steps > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+  nav.links a.hide-sm { display: none; }
+  .util .wrap > span:first-child { display: none; }
+  .stat + .stat { padding-left: 0; border-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="util"><div class="wrap"><span>An independent student project for planning your degree</span><span><a href="#how" data-nav="how">How it works</a><a href="#example" data-nav="example">Example roadmap</a></span></div></div>
+<header class="main">
+  <div class="wrap">
+    <a class="brand" href="#top" id="brandLink">Pathway Planner<small>Academic roadmaps</small></a>
+    <nav class="links" aria-label="Primary">
+      <a href="#how" data-nav="how" class="hide-sm">How it works</a>
+      <a href="#example" data-nav="example" class="hide-sm">Example</a>
+      <a href="#start" class="btn small" id="navStart">Start planning</a>
+    </nav>
+  </div>
+  <div class="rail" id="rail" aria-label="Progress"><div class="wrap"><span id="railTxt">Step 1 of 4</span><div class="bar"><i id="railBar"></i></div></div></div>
+</header>
+<main id="top">
+
+  <!-- LANDING -->
+  <section id="s-landing">
+    <div class="hero">
+      <div class="wrap">
+        <div>
+          <p class="kicker">Plan your way to graduation</p>
+          <h1><span class="w-static" data-words>Your path to your</span><span class="rotor fade" id="rotWord" aria-live="polite">degree.</span></h1>
+          <p class="line fade" id="heroLine"></p>
+          <div class="row"><button class="btn light" id="startBtn">Build my academic plan</button><a class="btn ghost" style="color:#fff;border-color:#fff" href="#how" data-nav="how">See how it works</a></div>
+        </div>
+        <aside class="peek" id="example" aria-label="Example roadmap">
+          <div class="tag"><span>Example term</span><span>Quarter system</span></div>
+          <h3>Junior Winter Quarter 2027</h3>
+          <ul>
+            <li><span>ACTG 138 · Tax</span><b>5 credits</b></li>
+            <li><span>ACTG 134 · Accounting Information Systems</span><b>5 credits</b></li>
+            <li><span>Core, general education or open elective</span><b>5 credits</b></li>
+            <li><span>Core, general education or open elective</span><b>5 credits</b></li>
+          </ul>
+          <div class="foot"><span>4 courses</span><span>20 credits</span></div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="section" id="how">
+      <div class="wrap">
+        <p class="eyebrow reveal" style="color:var(--red)">How it works</p>
+        <h2 class="reveal" style="margin-top:10px">Three short steps from "where do I start?" to a plan you can edit.</h2>
+        <div class="steps">
+          <div class="reveal"><span class="n">1</span><h3>Introduce yourself</h3><p>Tell us your name, school, major and minor in one friendly sentence, then where you are in your studies today.</p></div>
+          <div class="reveal"><span class="n">2</span><h3>Choose your pace</h3><p>Four classes a term or five. Add the electives you want and the courses you've already finished.</p></div>
+          <div class="reveal"><span class="n">3</span><h3>Download your roadmap</h3><p>See every term laid out with prerequisites first, then save it as an Excel workbook that tracks your progress.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="quote"><div class="wrap"><p class="fade" id="quoteLine"></p></div></div>
+
+    <div class="section stone">
+      <div class="wrap narrow">
+        <h2 class="reveal">What to know before you start</h2>
+        <p class="reveal" style="margin-top:16px">This is a working prototype. It builds plans from a built-in sample catalog based on the upper-division Accounting schedule for 2026-2027. Live catalog and student-record connections are planned for a later phase, so nothing here replaces a meeting with your academic advisor.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 1 -->
+  <section class="screen" id="s-1" hidden>
+    <div class="wrap narrow"><div class="card">
+      <p class="eyebrow">Step 1 · Introduce yourself</p>
+      <h2 data-words>Let's get to know you.</h2>
+      <p class="sub">Fill in the blanks. Start typing in a blank to search the list.</p>
+      <div class="sentence">
+        My name is <input id="inName" class="w-name" placeholder="Enter your name." autocomplete="given-name" aria-label="Your name">
+        at <input id="inUni" class="w-uni" list="dlUni" placeholder="your university" autocomplete="off" aria-label="University">,
+        and I want to major in <input id="inMajor" class="w-major" list="dlMajor" placeholder="your major" autocomplete="off" aria-label="Major">
+        and minor in <input id="inMinor" class="w-minor" list="dlMinor" placeholder="your minor" autocomplete="off" aria-label="Minor">.
+      </div>
+      <datalist id="dlUni"></datalist><datalist id="dlMajor"></datalist><datalist id="dlMinor"></datalist>
+      <div class="banner" id="catBanner" hidden></div>
+      <p class="msg" id="msg1" role="alert"></p>
+      <div class="actions"><button class="btn ghost small" data-go="landing">Back</button><button class="btn" id="go1">Let's do it</button></div>
+    </div></div>
+  </section>
+
+  <!-- LOADING -->
+  <section class="screen" id="s-load" hidden>
+    <div class="wrap"><div class="loading">
+      <h2 class="fade" id="loadMsg">Finding your university's academic requirements...</h2>
+      <div class="sweep" aria-hidden="true"><i></i></div>
+    </div></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="screen" id="s-2" hidden>
+    <div class="wrap narrow"><div class="card">
+      <p class="eyebrow">Step 2 · Where you are now</p>
+      <h2 data-words>Where are you in your academic journey?</h2>
+      <p class="sub" id="sent2">I am a Junior student on the Quarter system.</p>
+      <p class="lbl">Academic standing</p>
+      <div class="tiles" id="standingTiles"></div>
+      <p class="lbl">Academic calendar</p>
+      <div class="tiles" id="calTiles"></div>
+      <p class="fine" id="calNote"></p>
+      <p class="lbl" style="margin-top:14px">Your academic periods</p>
+      <div class="chips" id="periodChips"></div>
+      <p class="fine" id="periodNote"></p>
+      <div class="actions"><button class="btn ghost small" data-go="1">Back</button><button class="btn" id="go2">Almost there</button></div>
+    </div></div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="screen" id="s-3" hidden>
+    <div class="wrap narrow"><div class="card">
+      <p class="eyebrow">Step 3 · Your pace</p>
+      <h2 data-words>How ambitious would you like your schedule to be?</h2>
+      <p class="sub">We'll help you balance your workload while keeping your graduation goals in mind.</p>
+      <p class="lbl">Do you want to overload?</p>
+      <div class="tiles big" id="loadTiles"></div>
+      <div class="field"><label for="startTerm">First term to plan</label><select id="startTerm"></select></div>
+      <p class="lbl">Accounting electives you'd like</p>
+      <p class="fine">Pick the ones you want. Confirm with your advisor how many electives your major requires.</p>
+      <div class="checks" id="electChecks"></div>
+      <div class="actions"><button class="btn ghost small" data-go="2">Back</button><button class="btn" id="go3">Continue</button></div>
+    </div></div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="screen" id="s-4" hidden>
+    <div class="wrap narrow"><div class="card">
+      <p class="eyebrow">Step 4 · What you've already done</p>
+      <h2 data-words>Which courses are already behind you?</h2>
+      <p class="sub">We won't schedule anything you've finished, and we'll sequence the rest around prerequisites.</p>
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn ghost small" disabled title="Coming in a later phase">Connect Workday (coming soon)</button>
+        <button class="btn ghost small" disabled title="Coming in a later phase">Upload transcript (coming soon)</button>
+      </div>
+      <p class="fine" style="margin-bottom:22px">For now, enter your progress by hand. Nothing you type here leaves this page.</p>
+      <div class="field"><label for="unitsDone" id="unitsLbl">Credits completed so far</label><input id="unitsDone" type="number" min="0" max="400" step="1" inputmode="numeric"></div>
+      <p class="fine" id="unitsHelp" style="margin:-10px 0 20px"></p>
+      <p class="lbl">Courses you've completed</p>
+      <div id="doneChecks"></div>
+      <p class="msg" id="msg4" role="alert"></p>
+      <div class="actions"><button class="btn ghost small" data-go="3">Back</button><button class="btn" id="go4">Build my roadmap</button></div>
+    </div></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="screen" id="s-res" hidden>
+    <div class="wrap"><div class="card">
+      <div class="celebrate">
+        <p class="eyebrow">Your academic roadmap is ready</p>
+        <h1 id="resTitle" data-words>You did it!</h1>
+        <p class="cheer fade" id="cheer" aria-live="polite"></p>
+      </div>
+      <p class="summary" id="resBody"></p>
+      <div class="stats" id="stats" style="margin-top:28px"></div>
+      <div class="todo" id="todo" hidden><h3>Worth confirming with your advisor</h3><ul id="todoList"></ul></div>
+      <div class="row">
+        <button class="btn" id="dlBtn">Download Excel</button>
+        <button class="btn ghost" id="viewBtn">View academic roadmap</button>
+        <button class="btn ghost" id="editBtn">Edit my preferences</button>
+        <button class="btn ghost" id="regenBtn">Regenerate my schedule</button>
+      </div>
+      <p class="msg" id="dlMsg" role="status" style="color:var(--red)"></p>
+      <div id="roadmap" hidden>
+        <div class="plan" id="plan"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <b>Pathway Planner</b>
+    <p>An independent student project. It is not affiliated with or endorsed by Santa Clara University or any other institution.</p>
+    <p>Course data is a sample drawn from the upper-division Accounting schedule for 2026-2027. Always confirm requirements with your official catalog and academic advisor.</p>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  /* ---------- Sample catalog (Santa Clara University upper-division Accounting schedule, 2026-2027) ---------- */
+  const CAT = { MAJOR: "Major", PRE: "Major Prerequisite", ELEC: "Major Elective", MINOR: "Minor", CORE: "Core & Electives" };
+  const CLS = { [CAT.MAJOR]: "Major", [CAT.PRE]: "Pre", [CAT.ELEC]: "Elec", [CAT.MINOR]: "Minor", [CAT.CORE]: "Core" };
+  const FOUND = "Foundation course, not on the upper-division schedule. Availability assumed; confirm in the class schedule.";
+  const COURSES = [
+    { code: "ACTG 11", name: "Financial Accounting", u: 5, cat: CAT.PRE, hard: [], soft: [], uReq: 0, off: "FWS", pre: "None listed", note: FOUND, ver: false, who: "ab" },
+    { code: "ACTG 12", name: "Managerial Accounting", u: 5, cat: CAT.PRE, hard: [], soft: [], uReq: 0, off: "FWS", pre: "None listed", note: FOUND, ver: false, who: "ab" },
+    { code: "OMIS 15", name: "OMIS 15 (title to confirm)", u: 5, cat: CAT.PRE, hard: [], soft: [], uReq: 0, off: "FWS", pre: "None listed", note: "Prerequisite for ACTG 120. " + FOUND, ver: false, who: "ab" },
+    { code: "OMIS 30", name: "OMIS 30 (title to confirm)", u: 5, cat: CAT.PRE, hard: [], soft: [], uReq: 0, off: "FWS", pre: "None listed", note: "A&IS prerequisite for ACTG 155 (CSCI 10 also accepted). " + FOUND, ver: false, who: "b" },
+    { code: "OMIS 105", name: "OMIS 105 (title to confirm)", u: 5, cat: CAT.PRE, hard: [], soft: [], uReq: 0, off: "FWS", pre: "None listed", note: "A&IS prerequisite for ACTG 155. " + FOUND, ver: false, who: "b" },
+    { code: "ACTG 120", name: "Accounting Data Analysis and Visualization", u: 5, cat: CAT.MAJOR, hard: ["ACTG 11", "OMIS 15"], soft: [], uReq: 70, off: "FS", pre: "ACTG 11, OMIS 15, 70 units", note: "Juniors planning to study abroad in fall should take this in spring of sophomore year.", ver: true, who: "ab" },
+    { code: "ACTG 130", name: "Intermediate I", u: 5, cat: CAT.MAJOR, hard: ["ACTG 11", "ACTG 12"], soft: ["ACTG 120"], uReq: 96, off: "FW", pre: "ACTG 11, 12, 120*, 96 units", note: "Junior year. Best in fall. Abroad students have priority for winter.", ver: true, who: "ab" },
+    { code: "ACTG 131", name: "Intermediate II", u: 5, cat: CAT.MAJOR, hard: ["ACTG 130"], soft: [], uReq: 0, off: "WS", pre: "ACTG 130", note: "Junior year.", ver: true, who: "ab" },
+    { code: "ACTG 132", name: "Advanced Financial Accounting", u: 5, cat: CAT.MAJOR, hard: ["ACTG 131"], soft: [], uReq: 0, off: "FS", pre: "ACTG 131", note: "Junior or senior year.", ver: true, who: "ab" },
+    { code: "ACTG 134", name: "Accounting Information Systems", u: 5, cat: CAT.MAJOR, hard: ["ACTG 11"], soft: ["ACTG 12"], uReq: 0, off: "WS", pre: "ACTG 11, 12*", note: "Accounting majors only; A&IS majors do not need it. Satisfies the OMIS 34 core requirement. Any year.", ver: true, who: "a" },
+    { code: "ACTG 135", name: "Audit", u: 5, cat: CAT.MAJOR, hard: [], soft: ["ACTG 131"], uReq: 0, off: "FS", pre: "ACTG 131*", note: "Junior or senior year.", ver: true, who: "ab" },
+    { code: "ACTG 136", name: "Cost", u: 5, cat: CAT.MAJOR, hard: ["ACTG 130"], soft: [], uReq: 0, off: "FW", pre: "ACTG 130", note: "Senior year. FNCE 121 recommended first.", ver: true, who: "ab" },
+    { code: "ACTG 138", name: "Tax", u: 5, cat: CAT.MAJOR, hard: ["ACTG 11"], soft: ["ACTG 12"], uReq: 0, off: "FW", pre: "ACTG 11, 12*", note: "Any year. Encouraged for sophomores.", ver: true, who: "ab" },
+    { code: "ACTG 155", name: "Financial Information Systems", u: 5, cat: CAT.MAJOR, hard: ["OMIS 30", "OMIS 105"], soft: [], uReq: 0, off: "FWS", pre: "OMIS 30 or CSCI 10, and OMIS 105", note: "A&IS majors register for ACTG 155 (not OMIS 150) for CPA requirements.", ver: true, who: "b" },
+    { code: "ACTG 148", name: "Taxation of Business Entities", u: 5, cat: CAT.ELEC, hard: ["ACTG 131", "ACTG 138"], soft: [], uReq: 0, off: "S", pre: "ACTG 131, 138", note: "Elective.", ver: true, who: "ab", elective: true },
+    { code: "ACTG 150", name: "Financial Fraud", u: 5, cat: CAT.ELEC, hard: [], soft: ["ACTG 131"], uReq: 0, off: "S", pre: "ACTG 131*", note: "Elective.", ver: true, who: "ab", elective: true },
+    { code: "ACTG 140", name: "Not for Profit Accounting", u: 3, cat: CAT.ELEC, hard: ["ACTG 11"], soft: [], uReq: 0, off: "W", pre: "ACTG 11", note: "Elective.", ver: true, who: "ab", elective: true },
+    { code: "ACTG 5", name: "Personal Financial Planning", u: 4, cat: CAT.ELEC, hard: [], soft: [], uReq: 0, off: "S", pre: "None listed", note: "Elective.", ver: true, who: "ab", elective: true },
+  ];
+  const BY = Object.fromEntries(COURSES.map((c) => [c.code, c]));
+  const MAJORS = [
+    { name: "Accounting", key: "a" },
+    { name: "Accounting and Information Systems (A&IS)", key: "b" },
+  ];
+  const MINORS = ["No minor", "Information Systems", "Economics", "Data Science", "Mathematics", "Psychology", "Spanish"];
+  const UNIS = [
+    { name: "Santa Clara University", cal: "quarter", loaded: true },
+    { name: "Stanford University", cal: "quarter" }, { name: "University of California, Los Angeles", cal: "quarter" },
+    { name: "University of California, Berkeley", cal: "semester" }, { name: "San José State University", cal: "semester" },
+    { name: "Arizona State University", cal: "semester" }, { name: "New York University", cal: "semester" },
+    { name: "University of Michigan", cal: "semester" },
+  ];
+  const STANDINGS = ["Freshman", "Sophomore", "Junior", "Senior", "Other"];
+  const TNAME = { F: "Fall", W: "Winter", S: "Spring" };
+  const CHEERS = [
+    "Look at you, planning your own path. That's the hardest first step.",
+    "One course at a time, you're building something remarkable.",
+    "Your future self is already cheering for you.",
+    "Sunny stretches ahead. This plan found them.",
+    "Big things begin with one well-planned term.",
+    "You've got the curiosity, the heart, and now a plan.",
+    "Every great journey has a map. Yours is in your hands.",
+  ];
+
+  /* ---------- State ---------- */
+  const S = { name: "", uni: "", loaded: false, major: "a", majorName: "", minor: "No minor", standing: "Junior", calendar: "quarter",
+    load: 4, start: "W2027", electives: ["ACTG 150", "ACTG 148"], units: 90, unitsTouched: false, done: {}, doneSeeded: "" };
+  let PLAN = null;
+
+  /* ---------- Motion helpers ---------- */
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fadeCycle(el, phrases, ms, i0) {
+    let i = i0 || 0; el.textContent = phrases[i]; requestAnimationFrame(() => el.classList.add("in"));
+    if (reduce || phrases.length < 2) return null;
+    return setInterval(() => { el.classList.remove("in"); setTimeout(() => { i = (i + 1) % phrases.length; el.textContent = phrases[i]; el.classList.add("in"); }, 750); }, ms);
+  }
+  function splitWords(el) {
+    const t = el.textContent.trim().replace(/\s+/g, " ");
+    el.innerHTML = t.split(" ").map((w, i) => `<span class="w" style="--i:${i}">${esc(w)}</span>`).join(" ");
+  }
+
+  /* ---------- Screens and progress ---------- */
+  const screens = ["landing", "1", "load", "2", "3", "4", "res"];
+  let cheerTimer = null;
+  function show(name) {
+    screens.forEach((n) => { $("s-" + n).hidden = n !== name; });
+    const step = { 1: 1, 2: 2, 3: 3, 4: 4 }[name];
+    $("rail").classList.toggle("on", !!step);
+    if (step) { $("railTxt").textContent = "Step " + step + " of 4"; $("railBar").style.width = step * 25 + "%"; }
+    if (cheerTimer) { clearInterval(cheerTimer); cheerTimer = null; }
+    $("s-" + name).querySelectorAll("[data-words]").forEach(splitWords);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+  document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
+  $("startBtn").addEventListener("click", () => show("1"));
+  $("navStart").addEventListener("click", (e) => { e.preventDefault(); show("1"); });
+  $("brandLink").addEventListener("click", (e) => { e.preventDefault(); show("landing"); });
+  document.querySelectorAll("[data-nav]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault(); if ($("s-landing").hidden) show("landing");
+    setTimeout(() => $(a.dataset.nav).scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 40);
+  }));
+
+  /* ---------- Landing: fading words ---------- */
+  $("s-landing").querySelectorAll("[data-words]").forEach(splitWords);
+  fadeCycle($("rotWord"), ["degree.", "major.", "minor.", "graduation.", "future."], 3200);
+  fadeCycle($("heroLine"), [
+    "Tell us where you're studying and what you want to achieve.",
+    "We'll turn your academic goals into a personalized roadmap to graduation.",
+    "Prerequisites first. Every term balanced. Nothing left to guess.",
+    "Download it as an Excel workbook you can edit and keep.",
+  ], 4200);
+  fadeCycle($("quoteLine"), CHEERS, 4800);
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("seen"); io.unobserve(en.target); } }), { threshold: 0.15 }) : null;
+  document.querySelectorAll(".reveal").forEach((el, i) => { el.style.transitionDelay = (i % 3) * 120 + "ms"; if (io) io.observe(el); else el.classList.add("seen"); });
+
+  /* ---------- Step 1 ---------- */
+  $("dlUni").innerHTML = UNIS.map((u) => `<option value="${esc(u.name)}">${u.loaded ? "Sample catalog loaded" : "Catalog not connected yet"}</option>`).join("");
+  $("dlMajor").innerHTML = MAJORS.map((m) => `<option value="${esc(m.name)}"></option>`).join("");
+  $("dlMinor").innerHTML = MINORS.map((m) => `<option value="${esc(m)}"></option>`).join("");
+  const norm = (s) => s.trim().toLowerCase();
+  const uniMatch = () => UNIS.find((u) => norm(u.name) === norm($("inUni").value));
+  function updateBanner() {
+    const v = $("inUni").value.trim(); const u = uniMatch(); const b = $("catBanner");
+    if (!v) { b.hidden = true; return; }
+    b.hidden = false;
+    b.textContent = u && u.loaded
+      ? "Good news: the sample catalog for " + u.name + " is loaded. Majors listed here come from its 2026-2027 upper-division Accounting schedule."
+      : "We haven't connected " + v + "'s catalog yet. You can still try the planner: it will use the Santa Clara Accounting sample catalog so you can see how a roadmap works. Check every course against your own catalog.";
+  }
+  $("inUni").addEventListener("input", updateBanner);
+  $("go1").addEventListener("click", () => {
+    const name = $("inName").value.trim(); const uni = $("inUni").value.trim();
+    const maj = MAJORS.find((m) => norm(m.name) === norm($("inMajor").value));
+    const minRaw = $("inMinor").value.trim(); const min = MINORS.find((m) => norm(m) === norm(minRaw));
+    const bad = [];
+    $("inName").classList.toggle("bad", !name); if (!name) bad.push("your name");
+    $("inUni").classList.toggle("bad", !uni); if (!uni) bad.push("your university");
+    $("inMajor").classList.toggle("bad", !maj); if (!maj) bad.push("a major from the list");
+    $("inMinor").classList.toggle("bad", !min); if (!min) bad.push("a minor from the list (or No minor)");
+    if (bad.length) { $("msg1").textContent = "Almost! Please add " + bad.join(", ") + "."; return; }
+    $("msg1").textContent = "";
+    const u = uniMatch();
+    Object.assign(S, { name, uni, loaded: !!(u && u.loaded), major: maj.key, majorName: maj.name, minor: min });
+    if (u) S.calendar = u.cal; else if (!S.uniCustom) S.calendar = S.calendar || "quarter";
+    S.knownCal = u ? u.cal : null;
+    runLoading(["Finding your university's academic requirements...", "Looking into your major...", "Mapping out your degree requirements...", "Getting your academic roadmap ready!"], () => { buildStep2(); show("2"); });
+  });
+
+  function runLoading(msgs, done) {
+    show("load"); const el = $("loadMsg"); let i = 0;
+    el.classList.remove("in"); el.textContent = msgs[0]; requestAnimationFrame(() => el.classList.add("in"));
+    const t = setInterval(() => {
+      i++;
+      if (i >= msgs.length) { clearInterval(t); done(); return; }
+      el.classList.remove("in"); setTimeout(() => { el.textContent = msgs[i]; el.classList.add("in"); }, reduce ? 0 : 450);
+    }, 1250);
+  }
+
+  /* ---------- Step 2 ---------- */
+  function tile(name, id, label, small, checked) {
+    return `<div class="tile"><input type="radio" name="${name}" id="${id}" value="${esc(label)}" ${checked ? "checked" : ""}><label for="${id}">${esc(label)}${small ? `<small>${esc(small)}</small>` : ""}</label></div>`;
+  }
+  function buildStep2() {
+    $("standingTiles").innerHTML = STANDINGS.map((s, i) => tile("standing", "st" + i, s, "", S.standing === s)).join("");
+    $("calTiles").innerHTML = tile("cal", "calQ", "Quarter system", "3 terms a year", S.calendar === "quarter") + tile("cal", "calS", "Semester system", "2 terms a year", S.calendar === "semester");
+    refresh2();
+  }
+  function refresh2() {
+    const q = S.calendar === "quarter";
+    $("sent2").textContent = "I am a" + (S.standing === "Other" || S.standing === "Senior" && false ? "" : "") + (/^[AEIOU]/i.test(S.standing) ? "n " : " ") + S.standing + " student on the " + (q ? "Quarter" : "Semester") + " system.";
+    $("periodChips").innerHTML = (q ? ["Fall Quarter", "Winter Quarter", "Spring Quarter"] : ["Fall Semester", "Spring Semester"]).map((p) => `<span class="chip">${p}</span>`).join("");
+    $("periodNote").textContent = (q ? "Graduation default: 180 quarter credits." : "Graduation default: 120 semester credits.") + " We use your university's number when it's in the catalog. Summer is optional and isn't scheduled in this prototype.";
+  }
+  $("standingTiles").addEventListener("change", (e) => { S.standing = e.target.value; refresh2(); });
+  $("calTiles").addEventListener("change", (e) => {
+    const want = e.target.value.startsWith("Quarter") ? "quarter" : "semester";
+    if (S.knownCal && S.knownCal !== want) {
+      $("calNote").textContent = S.uni + " runs on the " + S.knownCal + " system, so we kept it there.";
+      $(S.knownCal === "quarter" ? "calQ" : "calS").checked = true; S.calendar = S.knownCal;
+    } else { S.calendar = want; $("calNote").textContent = ""; }
+    refresh2();
+  });
+  $("go2").addEventListener("click", () => { buildStep3(); show("3"); });
+
+  /* ---------- Step 3 ---------- */
+  function startOptions() {
+    return S.calendar === "quarter" ? [["W", 2027], ["S", 2027], ["F", 2027]] : [["S", 2027], ["F", 2027]];
+  }
+  function buildStep3() {
+    $("loadTiles").innerHTML =
+      tile("load", "ld5", "Yes, I'm comfortable with an overload.", "Five classes a term. Graduate sooner when it's feasible.", S.load === 5) +
+      tile("load", "ld4", "No, I prefer a standard course load.", "Four classes a term. Balanced and manageable.", S.load === 4);
+    const opts = startOptions();
+    if (!opts.some(([k, y]) => k + y === S.start)) S.start = opts[0][0] + opts[0][1];
+    $("startTerm").innerHTML = opts.map(([k, y]) => `<option value="${k}${y}" ${k + y === S.start ? "selected" : ""}>${TNAME[k]} ${y}</option>`).join("");
+    $("electChecks").innerHTML = COURSES.filter((c) => c.elective).map((c) =>
+      `<label><input type="checkbox" value="${c.code}" ${S.electives.includes(c.code) ? "checked" : ""}><span>${c.code} · ${esc(c.name)}<small>${c.u} units · offered ${c.off.split("").map((k) => TNAME[k]).join(", ")}</small></span></label>`).join("");
+  }
+  $("loadTiles").addEventListener("change", (e) => { S.load = e.target.id === "ld5" ? 5 : 4; });
+  $("startTerm").addEventListener("change", (e) => { S.start = e.target.value; });
+  $("electChecks").addEventListener("change", () => { S.electives = [...$("electChecks").querySelectorAll("input:checked")].map((i) => i.value); });
+  $("go3").addEventListener("click", () => { buildStep4(); show("4"); });
+
+  /* ---------- Step 4 ---------- */
+  function majorCourses() { return COURSES.filter((c) => c.who.includes(S.major) && !c.elective); }
+  function buildStep4() {
+    const q = S.calendar === "quarter";
+    const idx = Math.max(0, STANDINGS.indexOf(S.standing));
+    const seed = S.standing + S.calendar;
+    if (S.doneSeeded !== seed) {
+      S.doneSeeded = seed;
+      if (!S.unitsTouched) S.units = idx >= 4 ? 0 : idx * (q ? 45 : 30);
+      S.done = {};
+      if (idx >= 1) { S.done["ACTG 11"] = true; S.done["ACTG 12"] = true; }
+      if (idx >= 2) S.done["OMIS 15"] = true;
+    }
+    $("unitsDone").value = S.units;
+    $("unitsLbl").textContent = q ? "Quarter credits completed so far" : "Semester credits completed so far";
+    $("unitsHelp").textContent = "Include transfer, AP and IB credit. Pre-filled from your class standing; change it to match your record.";
+    const groups = [["Prerequisite courses", CAT.PRE], ["Required major courses", CAT.MAJOR]];
+    $("doneChecks").innerHTML = groups.map(([t, cat]) =>
+      `<p class="group">${t}</p><div class="checks">` + majorCourses().filter((c) => c.cat === cat).map((c) =>
+        `<label><input type="checkbox" value="${c.code}" ${S.done[c.code] ? "checked" : ""}><span>${c.code} · ${esc(c.name)}<small>${c.u} units</small></span></label>`).join("") + "</div>").join("") +
+      `<p class="fine">Foundation courses are pre-checked for sophomores and above. Uncheck anything you haven't finished.</p>`;
+  }
+  $("unitsDone").addEventListener("input", (e) => { S.units = Math.max(0, parseInt(e.target.value, 10) || 0); S.unitsTouched = true; });
+  $("doneChecks").addEventListener("change", (e) => { S.done[e.target.value] = e.target.checked; });
+  $("go4").addEventListener("click", () => {
+    const need = S.calendar === "quarter" ? 180 : 120;
+    if (S.units >= need) { $("msg4").textContent = "That already meets the " + need + "-credit minimum. If you're still finishing requirements, lower the number to the credits you have in hand."; return; }
+    $("msg4").textContent = "";
+    generate(["Mapping out your degree requirements...", "Sequencing prerequisites...", "Balancing your course load...", "Getting your academic roadmap ready!"]);
+  });
+
+  /* ---------- Scheduling engine (deterministic) ---------- */
+  function termAvail(c, key, quarter) { return quarter ? c.off.includes(key) : (key === "F" ? c.off.includes("F") : c.off.includes("S") || c.off.includes("W")); }
+  function nextTerm(t, quarter) {
+    if (t.key === "F") return { key: quarter ? "W" : "S", year: t.year + 1 };
+    if (t.key === "W") return { key: "S", year: t.year };
+    return { key: "F", year: t.year };
+  }
+  function buildPlan() {
+    const q = S.calendar === "quarter";
+    const gradU = q ? 180 : 120;
+    const done = new Set(Object.keys(S.done).filter((k) => S.done[k]));
+    const req = majorCourses().concat(S.electives.map((c) => BY[c]).filter(Boolean));
+    const reqCodes = new Set(req.map((c) => c.code));
+    const priorDone = req.filter((c) => done.has(c.code));
+    const pending = req.filter((c) => !done.has(c.code)).map((c) => ({ ...c, placed: false }));
+    // dependency depth for priority
+    const depth = {};
+    const dep = (code) => {
+      if (depth[code] != null) return depth[code];
+      depth[code] = 0;
+      let d = 0;
+      req.forEach((c) => { if (c.hard.includes(code) || c.soft.includes(code)) d = Math.max(d, 1 + dep(c.code)); });
+      return (depth[code] = d);
+    };
+    req.forEach((c) => dep(c.code));
+    const catRank = { [CAT.PRE]: 0, [CAT.MAJOR]: 0, [CAT.ELEC]: 1 };
+    const minorN = S.minor === "No minor" ? 0 : 5;
+    const minors = Array.from({ length: minorN }, (_, i) => ({ code: "MINOR " + (i + 1), name: "Minor course (" + S.minor + ")", u: 5, cat: CAT.MINOR, hard: [], soft: [], uReq: 0, off: "FWS", pre: "Not verified", note: "Requirement not loaded in the prototype. Replace with a course from your minor's official list.", ver: false, placed: false }));
+    const all = pending.concat(minors);
+    const have = new Set(done);
+    let earned = S.units;
+    const plannedU = all.reduce((a, c) => a + c.u, 0);
+    let fillLeft = Math.max(0, gradU - S.units - plannedU);
+    const keyOf = (c) => (catRank[c.cat] ?? 2) * 100 - depth[c.code] * 10 + c.off.length;
+    let t = { key: S.start[0], year: parseInt(S.start.slice(1), 10) };
+    const terms = []; const flags = [];
+    const idx = STANDINGS.indexOf(S.standing);
+    for (let n = 0; n < 24; n++) {
+      if (all.every((c) => c.placed) && fillLeft <= 0) break;
+      const items = []; const thisTerm = new Set();
+      const ok = (c) => !c.placed && termAvail(c, t.key, q) && c.hard.every((h) => have.has(h)) && c.soft.every((s) => have.has(s) || thisTerm.has(s)) && earned >= c.uReq;
+      while (items.length < S.load) {
+        const cand = all.filter(ok).sort((a, b) => keyOf(a) - keyOf(b));
+        if (!cand.length) break;
+        const c = cand[0]; c.placed = true; thisTerm.add(c.code); items.push({ ...c, status: "Planned" });
+      }
+      let slots = S.load - items.length;
+      while (slots > 0 && fillLeft > 0) {
+        const u = Math.min(5, fillLeft); fillLeft -= u; slots--;
+        items.push({ code: "TBD", name: "University core, general education or open elective", u, cat: CAT.CORE, pre: "None", note: "Choose from your university's core list. Core categories aren't loaded in the prototype.", status: "Planned", ver: false });
+      }
+      const mapped = items.map((c, i) => ({ ...c }));
+      mapped.forEach((c) => { earned += c.u; });
+      items.forEach((c) => { if (c.code !== "TBD") thisTerm.add(c.code); });
+      thisTerm.forEach((c) => have.add(c));
+      const ay = t.key === "F" ? t.year : t.year - 1;
+      const lvl = idx >= 0 && idx < 4 ? idx + (ay - 2026) : null;
+      const lvlName = lvl == null ? "" : lvl > 3 ? "Fifth-Year " : ["Freshman", "Sophomore", "Junior", "Senior"][Math.max(0, lvl)] + " ";
+      terms.push({ key: t.key, year: t.year, label: lvlName + TNAME[t.key] + (q ? " Quarter " : " Semester ") + t.year, items: mapped, units: mapped.reduce((a, c) => a + c.u, 0) });
+      t = nextTerm(t, q);
+    }
+    const blocked = all.filter((c) => !c.placed);
+    if (blocked.length) flags.push("These courses couldn't be placed within the plan window, usually because of prerequisites or offering terms: " + blocked.map((c) => c.code).join(", ") + ".");
+    const used = terms.filter((x) => x.items.length);
+    const last = used[used.length - 1];
+    const endMonth = last ? { F: "December", W: "March", S: q ? "June" : "May" }[last.key] : "";
+    const grad = last ? endMonth + " " + last.year : "Already complete";
+    const hi = terms.filter((x) => x.units > 19).length;
+    if (S.load === 5) flags.push("Five classes a term is " + Math.max(...used.map((x) => x.units)) + " units at most. " + (hi ? hi + " term(s) go above 19 units, which may need overload approval." : "Check your registrar's maximum before you register."));
+    flags.push("Course availability and prerequisites come from the sample 2026-2027 Accounting schedule. Foundation courses and the minor are unverified.");
+    if (S.electives.length) flags.push("Your advisor can confirm how many Accounting electives your catalog year requires. This plan includes the " + S.electives.length + " you picked.");
+    if (terms.some((x) => x.items.some((c) => c.code === "TBD"))) flags.push("Core and general education slots are marked TBD. Fill them from your university's official core list.");
+    if (!S.loaded) flags.push(S.uni + " isn't connected yet. This plan uses the Santa Clara sample catalog, so treat it as a demo.");
+    const termCount = used.length;
+    const planned = used.reduce((a, x) => a + x.units, 0);
+    return { q, gradU, terms: used, priorDone, grad, flags, termCount, planned, remaining: Math.max(0, gradU - S.units), early: termCount < (q ? 9 : 6), reqCodes };
+  }
+
+  /* ---------- Results ---------- */
+  function generate(msgs) {
+    runLoading(msgs, () => { PLAN = buildPlan(); renderResults(); show("res"); startCheer(); });
+  }
+  function renderResults() {
+    const P = PLAN; const first = S.name.split(/\s+/)[0];
+    $("resTitle").textContent = "You did it, " + first + "!";
+    const unit = P.q ? "quarter" : "semester";
+    $("resBody").innerHTML = P.termCount
+      ? `Based on your major, minor, completed credits and preferred course load, we built a personalized schedule. Your plan currently projects graduation in <b>${esc(P.grad)}</b>, after ${P.termCount} ${unit}${P.termCount === 1 ? "" : "s"}. ${P.early ? "That's ahead of the standard four-year pace." : ""} We put prerequisites first and kept each term at ${S.load} classes. Download your Excel roadmap below.`
+      : "You already meet the requirements in this plan. Congratulations!";
+    $("stats").innerHTML = [
+      [S.load === 5 ? "5 classes" : "4 classes", "per " + unit],
+      [P.termCount, unit + "s remaining"],
+      [P.remaining, "credits remaining"],
+      [P.grad, "projected graduation"],
+    ].map(([a, b]) => `<div class="stat"><b>${esc(a)}</b><span>${esc(b)}</span></div>`).join("");
+    $("todoList").innerHTML = P.flags.map((f) => `<li>${esc(f)}</li>`).join("");
+    $("todo").hidden = !P.flags.length;
+    $("plan").innerHTML = P.terms.map((t) => `<div class="term"><h3>${esc(t.label)}</h3><div class="tot">${t.items.length} courses · ${t.units} credits</div><ul>` +
+      t.items.map((c) => `<li class="c-${CLS[c.cat]}"><b>${esc(c.code === "TBD" ? "Core / elective" : c.code)}</b> ${c.code === "TBD" ? "" : esc(c.name)}<span>${c.u} credits · ${esc(c.cat)}</span></li>`).join("") + "</ul></div>").join("");
+    $("legend").innerHTML = [["Major", "Major"], ["Pre", "Prerequisite"], ["Elec", "Major elective"], ["Minor", "Minor"], ["Core", "Core and open electives"]]
+      .map(([k, l]) => `<span><i class="c-${k}"></i>${l}</span>`).join("");
+    $("roadmap").hidden = true; $("viewBtn").textContent = "View Academic Roadmap"; $("dlMsg").textContent = "";
+  }
+  function startCheer() {
+    const el = $("cheer"); el.classList.remove("in");
+    cheerTimer = fadeCycle(el, CHEERS, 4500, Math.floor(Math.random() * CHEERS.length));
+  }
+  $("viewBtn").addEventListener("click", () => { const r = $("roadmap"); r.hidden = !r.hidden; $("viewBtn").textContent = r.hidden ? "View Academic Roadmap" : "Hide Academic Roadmap"; if (!r.hidden) r.scrollIntoView({ behavior: "smooth", block: "start" }); });
+  $("editBtn").addEventListener("click", () => { buildStep2(); show("2"); });
+  $("regenBtn").addEventListener("click", () => generate(["Re-checking your prerequisites...", "Balancing your course load...", "Getting your academic roadmap ready!"]));
+
+  /* ---------- Minimal XLSX writer (JSZip) ---------- */
+  const colL = (n) => { let s = ""; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = ((n - 1 - m) / 26) | 0; } return s; };
+  const xe = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+  function Book() {
+    const fonts = ['<font><sz val="11"/><name val="Calibri"/></font>'], fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+    const borders = ["<border><left/><right/><top/><bottom/><diagonal/></border>"], xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], fmts = [], dxfs = [];
+    const memo = {}; const pool = (arr, x) => { let i = arr.indexOf(x); if (i < 0) { arr.push(x); i = arr.length - 1; } return i; };
+    const sheets = [];
+    return {
+      style(o) {
+        if (!o) return 0; const k = JSON.stringify(o); if (memo[k] != null) return memo[k];
+        const f = pool(fonts, `<font>${o.b ? "<b/>" : ""}${o.i ? "<i/>" : ""}<sz val="${o.sz || 11}"/><color rgb="FF${o.color || "233446"}"/><name val="Calibri"/></font>`);
+        const fl = o.bg ? pool(fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${o.bg}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+        const bd = o.bd ? pool(borders, `<border>${["left", "right", "top", "bottom"].map((s) => `<${s} style="thin"><color rgb="FFD9D2BE"/></${s}>`).join("")}<diagonal/></border>`) : 0;
+        let nf = 0; if (o.fmt) { let j = fmts.indexOf(o.fmt); if (j < 0) { fmts.push(o.fmt); j = fmts.length - 1; } nf = 164 + j; }
+        const al = o.h || o.v || o.wrap || o.indent ? `<alignment${o.h ? ` horizontal="${o.h}"` : ""} vertical="${o.v || "center"}"${o.wrap ? ' wrapText="1"' : ""}${o.indent ? ` indent="${o.indent}"` : ""}/>` : "";
+        xfs.push(`<xf numFmtId="${nf}" fontId="${f}" fillId="${fl}" borderId="${bd}" xfId="0" applyFont="1" applyFill="1" applyBorder="1"${nf ? ' applyNumberFormat="1"' : ""}${al ? ' applyAlignment="1">' + al + "</xf>" : "/>"}`);
+        return (memo[k] = xfs.length - 1);
+      },
+      dxf(o) { dxfs.push(`<dxf><font>${o.b ? "<b/>" : ""}${o.strike ? "<strike/>" : ""}<color rgb="FF${o.color || "233446"}"/></font><fill><patternFill><bgColor rgb="FF${o.bg}"/></patternFill></fill></dxf>`); return dxfs.length - 1; },
+      sheet(name, opt) {
+        const sh = { name, cells: {}, merges: [], widths: opt.widths || [], heights: {}, freeze: opt.freeze, tab: opt.tab, val: [], cf: [] }; sheets.push(sh);
+        const book = this;
+        return {
+          set(r, c, v, st) { (sh.cells[r] = sh.cells[r] || {})[c] = { v, s: book.style(st) }; },
+          merge(a) { sh.merges.push(a); }, height(r, h) { sh.heights[r] = h; },
+          list(sq, items) { sh.val.push({ sq, items }); }, cf(sq, formula, dxf) { sh.cf.push({ sq, formula, dxf }); },
+        };
+      },
+      async build() {
+        const zip = new JSZip(); const n = sheets.length;
+        zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`);
+        zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+        zip.file("xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>${sheets.map((s, i) => `<sheet name="${xe(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`);
+        zip.file("xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+        zip.file("xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${fmts.length ? `<numFmts count="${fmts.length}">${fmts.map((f, i) => `<numFmt numFmtId="${164 + i}" formatCode="${xe(f)}"/>`).join("")}</numFmts>` : ""}<fonts count="${fonts.length}">${fonts.join("")}</fonts><fills count="${fills.length}">${fills.join("")}</fills><borders count="${borders.length}">${borders.join("")}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="${dxfs.length}">${dxfs.join("")}</dxfs></styleSheet>`);
+        sheets.forEach((sh, i) => {
+          const rows = Object.keys(sh.cells).map(Number).sort((a, b) => a - b); let maxC = 1;
+          const data = rows.map((r) => {
+            const cs = Object.keys(sh.cells[r]).map(Number).sort((a, b) => a - b); maxC = Math.max(maxC, cs[cs.length - 1]);
+            const cx = cs.map((c) => {
+              const { v, s } = sh.cells[r][c]; const ref = colL(c) + r; const sa = s ? ` s="${s}"` : "";
+              if (v == null || v === "") return `<c r="${ref}"${sa}/>`;
+              if (typeof v === "object") { const isS = typeof v.v === "string"; return `<c r="${ref}"${sa}${isS ? ' t="str"' : ""}><f>${xe(v.f)}</f>${v.v == null ? "" : `<v>${xe(v.v)}</v>`}</c>`; }
+              if (typeof v === "number") return `<c r="${ref}"${sa}><v>${v}</v></c>`;
+              return `<c r="${ref}"${sa} t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
+            }).join("");
+            return `<row r="${r}"${sh.heights[r] ? ` ht="${sh.heights[r]}" customHeight="1"` : ""}>${cx}</row>`;
+          }).join("");
+          const fr = sh.freeze ? `<pane ${sh.freeze.col ? `xSplit="${sh.freeze.col}" ` : ""}ySplit="${sh.freeze.row}" topLeftCell="${colL((sh.freeze.col || 0) + 1)}${sh.freeze.row + 1}" activePane="bottomLeft" state="frozen"/>` : "";
+          zip.file(`xl/worksheets/sheet${i + 1}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr>${sh.tab ? `<tabColor rgb="FF${sh.tab}"/>` : ""}</sheetPr><dimension ref="A1:${colL(maxC)}${rows[rows.length - 1] || 1}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"${i === 0 ? ' tabSelected="1"' : ""}>${fr}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="16"/>${sh.widths.length ? `<cols>${sh.widths.map((w, k) => `<col min="${k + 1}" max="${k + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>` : ""}<sheetData>${data}</sheetData>${sh.merges.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map((m) => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}${sh.cf.map((c, k) => `<conditionalFormatting sqref="${c.sq}"><cfRule type="expression" dxfId="${c.dxf}" priority="${k + 1}"><formula>${xe(c.formula)}</formula></cfRule></conditionalFormatting>`).join("")}${sh.val.length ? `<dataValidations count="${sh.val.length}">${sh.val.map((v) => `<dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="${v.sq}"><formula1>"${xe(v.items.join(","))}"</formula1></dataValidation>`).join("")}</dataValidations>` : ""}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/></worksheet>`);
+        });
+        return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      },
+    };
+  }
+
+  /* ---------- Workbook content ---------- */
+  const FILL = { [CAT.MAJOR]: "D6E8F7", [CAT.PRE]: "E9F1F9", [CAT.ELEC]: "FBE8A6", [CAT.MINOR]: "FCE3CF", [CAT.CORE]: "DCE9D5" };
+  async function buildWorkbook() {
+    const P = PLAN, b = Book(), RM = "'Academic Roadmap'", DR = "'Degree Requirements'", OV = "'Academic Overview'";
+    const H = { b: 1, color: "FFFFFF", bg: "A6212D", bd: 1, v: "center", wrap: 1 };
+    const T = { b: 1, sz: 20, color: "A6212D" }, lab = { b: 1, bg: "F5F2EE", bd: 1 }, val = { bd: 1, h: "left" };
+    const unitWord = P.q ? "quarter" : "semester";
+    const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+    // Sheet 1
+    const o = b.sheet("Academic Overview", { widths: [34, 46, 4, 40], tab: "A6212D" });
+    o.set(1, 1, "Academic Roadmap for " + S.name, T); o.height(1, 32);
+    o.set(2, 1, "Prepared " + today + " with Pathway Planner (prototype, sample catalog)", { i: 1, color: "566879" });
+    const rowsO = [
+      ["Student name", S.name], ["University", S.uni], ["Major", S.majorName], ["Minor", S.minor], ["Academic standing", S.standing], ["Academic calendar", P.q ? "Quarter system" : "Semester system"],
+      ["Total credits required", P.gradU], ["Credits completed", S.units],
+      ["Credits remaining", { f: "B10-B11", v: P.gradU - S.units }],
+      ["Credits planned in this roadmap", { f: `SUMIFS(${RM}!D:D,${RM}!E:E,"<>")`, v: P.planned }],
+      ["Expected graduation date", P.grad], ["Remaining academic periods", P.termCount],
+      ["Recommended course load", S.load + " classes per " + unitWord + (S.load === 5 ? " (overload)" : " (standard)")],
+      ["Catalog data", S.loaded ? "Sample catalog: SCU upper-division Accounting schedule 2026-2027" : "Santa Clara sample catalog used as a stand-in for " + S.uni],
+    ];
+    rowsO.forEach(([l, v], i) => { o.set(4 + i, 1, l, lab); o.set(4 + i, 2, v, Object.assign({}, val, typeof v === "object" || typeof v === "number" ? { h: "left", fmt: "0" } : {})); });
+    let r = 4 + rowsO.length + 1;
+    o.set(r, 1, "Scheduling recommendations and outstanding items", { b: 1, sz: 14, color: "A6212D" }); r++;
+    const notes = ["Prerequisites are sequenced first, then courses that unlock the most others, then electives.", "Each term targets " + S.load + " classes. Placeholder rows marked TBD are core, general education or open electives to choose.", "Change a course's Status on the Academic Roadmap sheet to Completed or In progress and every progress figure updates."].concat(P.flags);
+    notes.forEach((n) => { o.set(r, 1, "• " + n, { wrap: 1, v: "top" }); o.merge(`A${r}:B${r}`); o.height(r, n.length > 95 ? 34 : 18); r++; });
+    r++; o.set(r, 1, "Color key", { b: 1, sz: 14, color: "A6212D" }); r++;
+    [[CAT.MAJOR, "Major requirement"], [CAT.PRE, "Major prerequisite"], [CAT.ELEC, "Major elective"], [CAT.MINOR, "Minor requirement"], [CAT.CORE, "Core, general education and open electives"]].forEach(([k, l]) => { o.set(r, 1, k, { bg: FILL[k], bd: 1, b: 1 }); o.set(r, 2, l, { bd: 1 }); r++; });
+    o.set(r, 1, "Completed", { bg: "C8D5C1", bd: 1, b: 1, color: "5C6B58" }); o.set(r, 2, "Status set to Completed (turns grey automatically)", { bd: 1 }); r++;
+    o.set(r, 1, "In progress", { bg: "FFF3B0", bd: 1, b: 1 }); o.set(r, 2, "Status set to In progress (turns yellow automatically)", { bd: 1 });
+
+    // Sheet 2
+    const m = b.sheet("Academic Roadmap", { widths: [34, 12, 44, 9, 20, 30, 15, 60], freeze: { row: 1 }, tab: "231F20" });
+    ["Academic Period", "Course Code", "Course Name", "Credits", "Requirement Category", "Prerequisites", "Status", "Notes"].forEach((h, i) => m.set(1, i + 1, h, H)); m.height(1, 30);
+    let row = 2; const firstRow = 2;
+    const loc = {};
+    P.terms.forEach((t) => {
+      m.set(row, 1, t.label, { b: 1, sz: 12, bg: "EFE6E1", color: "233446" }); for (let c = 2; c <= 8; c++) m.set(row, c, "", { bg: "EFE6E1" }); m.merge(`A${row}:H${row}`); row++;
+      const s = row;
+      t.items.forEach((c) => {
+        const st = { bd: 1, bg: FILL[c.cat], v: "center", wrap: 1 };
+        m.set(row, 1, t.label, st); m.set(row, 2, c.code, Object.assign({}, st, { b: 1 })); m.set(row, 3, c.name, st); m.set(row, 4, c.u, Object.assign({}, st, { h: "center" }));
+        m.set(row, 5, c.cat, st); m.set(row, 6, c.pre || "", st); m.set(row, 7, "Planned", Object.assign({}, st, { h: "center" })); m.set(row, 8, (c.note || "") + (c.ver === false ? " (Unverified)" : ""), st);
+        if (c.code !== "TBD") loc[c.code] = t.label; row++;
+      });
+      const e = row - 1; const comp = 0; const cnt = t.items.length;
+      const sub = { b: 1, bg: "F4EFDD", bd: 1 };
+      m.set(row, 1, "Period total", sub); m.set(row, 2, { f: `COUNTA(B${s}:B${e})`, v: cnt }, Object.assign({}, sub, { fmt: '0 "courses"', h: "center" })); m.set(row, 3, "", sub);
+      m.set(row, 4, { f: `SUM(D${s}:D${e})`, v: t.units }, Object.assign({}, sub, { h: "center" })); m.set(row, 5, "credits", sub);
+      m.set(row, 6, { f: `"Remaining: "&(COUNTA(B${s}:B${e})-COUNTIF(G${s}:G${e},"Completed"))`, v: "Remaining: " + cnt }, sub);
+      m.set(row, 7, { f: `COUNTIF(G${s}:G${e},"Completed")&" of "&COUNTA(B${s}:B${e})&" completed"`, v: "0 of " + cnt + " completed" }, sub); m.set(row, 8, "", sub);
+      m.list(`G${s}:G${e}`, ["Planned", "In progress", "Completed"]); row += 2;
+    });
+    const lastRow = row;
+    m.cf(`A${firstRow}:H${lastRow}`, `$G${firstRow}="Completed"`, b.dxf({ bg: "C8D5C1", color: "5C6B58", strike: 1 }));
+    m.cf(`A${firstRow}:H${lastRow}`, `$G${firstRow}="In progress"`, b.dxf({ bg: "FFF3B0", color: "233446", b: 1 }));
+
+    // Sheet 3
+    const d = b.sheet("Degree Requirements", { widths: [46, 20, 10, 13, 34, 20, 8, 56], freeze: { row: 7 }, tab: "A6212D" });
+    d.set(1, 1, "Degree Requirements Tracker", T); d.height(1, 32);
+    const items = [];
+    P.priorDone.forEach((c) => items.push({ c, period: "Before this plan", status: "Completed (before plan)", prior: true }));
+    P.terms.forEach((t) => t.items.forEach((c) => { if (c.code !== "TBD") items.push({ c, period: t.label, status: "Planned" }); }));
+    items.sort((a, b2) => Object.values(CAT).indexOf(a.c.cat) - Object.values(CAT).indexOf(b2.c.cat));
+    const uni = ["Writing requirement", "Quantitative or language requirement", "Residency requirement", "Upper-division credit requirement", "Course load and credit limit policy"];
+    const first = 8, lastD = first + items.length + uni.length - 1;
+    d.set(3, 1, "Requirements complete", lab); d.set(3, 2, { f: `SUM(G${first}:G${lastD})`, v: items.filter((x) => x.prior).length }, val);
+    d.set(4, 1, "Requirements total", lab); d.set(4, 2, { f: `COUNTA(A${first}:A${lastD})`, v: items.length + uni.length }, val);
+    const pc = items.filter((x) => x.prior).length / (items.length + uni.length);
+    d.set(5, 1, "Progress", lab); d.set(5, 2, { f: `REPT("█",ROUND(B3/B4*10,0))&REPT("░",10-ROUND(B3/B4*10,0))&" "&TEXT(B3/B4,"0%")`, v: bar(pc) + " " + Math.round(pc * 100) + "%" }, Object.assign({}, val, { color: "A6212D", b: 1 }));
+    ["Requirement", "Category", "Credits", "Course Code", "Planned Period", "Status", "Done", "Notes"].forEach((h, i) => d.set(7, i + 1, h, H)); d.height(7, 28);
+    let dr = first;
+    items.forEach(({ c, period, status, prior }) => {
+      const st = { bd: 1, bg: FILL[c.cat], wrap: 1 };
+      d.set(dr, 1, c.name, st); d.set(dr, 2, c.cat, st); d.set(dr, 3, c.u, Object.assign({}, st, { h: "center" })); d.set(dr, 4, c.code, Object.assign({}, st, { b: 1 })); d.set(dr, 5, period, st);
+      d.set(dr, 6, prior ? status : { f: `IFERROR(INDEX(${RM}!$G:$G,MATCH(D${dr},${RM}!$B:$B,0)),"Not scheduled")`, v: status }, st);
+      d.set(dr, 7, { f: `IF(LEFT(F${dr},8)="Complete",1,0)`, v: prior ? 1 : 0 }, Object.assign({}, st, { h: "center" })); d.set(dr, 8, (c.note || "") + (c.ver === false ? " (Unverified)" : ""), st); dr++;
+    });
+    uni.forEach((n) => {
+      const st = { bd: 1, bg: "F4EFDD", wrap: 1 };
+      d.set(dr, 1, "University: " + n, st); d.set(dr, 2, "University", st); d.set(dr, 3, "", st); d.set(dr, 4, "n/a", st); d.set(dr, 5, "n/a", st); d.set(dr, 6, "Not started", st);
+      d.set(dr, 7, { f: `IF(LEFT(F${dr},8)="Complete",1,0)`, v: 0 }, Object.assign({}, st, { h: "center" })); d.set(dr, 8, "Not loaded in the prototype. Add the details from your official catalog and set the status.", st);
+      d.list(`F${dr}`, ["Not started", "In progress", "Completed"]); dr++;
+    });
+    d.cf(`F${first}:F${lastD}`, `LEFT($F${first},8)="Complete"`, b.dxf({ bg: "C8D5C1", color: "2F5B3E", b: 1 }));
+    d.cf(`F${first}:F${lastD}`, `$F${first}="In progress"`, b.dxf({ bg: "FFF3B0", color: "233446", b: 1 }));
+
+    // Sheet 4
+    const g = b.sheet("Graduation Progress", { widths: [42, 22, 28], tab: "A6212D" });
+    g.set(1, 1, "Graduation Progress", T); g.height(1, 32);
+    ["Measure", "Value", "Progress"].forEach((h, i) => g.set(3, i + 1, h, H));
+    const bar2 = (cell, v) => ({ f: `IFERROR(REPT("█",ROUND(${cell}*10,0))&REPT("░",10-ROUND(${cell}*10,0)),"")`, v: typeof v === "number" ? bar(v) : "" });
+    const hasMinor = items.some((x) => x.c.cat === CAT.MINOR);
+    const coreTotal = P.terms.reduce((a, t) => a + t.items.filter((c) => c.cat === CAT.CORE).reduce((x, c) => x + c.u, 0), 0);
+    const earned0 = S.units, majorItems = items.filter((x) => /^Major/.test(x.c.cat)), majorDone = majorItems.filter((x) => x.prior).length;
+    const prog = [
+      ["Total credits required", { f: `${OV}!B10`, v: P.gradU }, null],
+      ["Total credits earned", { f: `${OV}!B11+SUMIFS(${RM}!D:D,${RM}!G:G,"Completed",${RM}!E:E,"<>")`, v: earned0 }, null],
+      ["Credits remaining", { f: "B4-B5", v: P.gradU - earned0 }, null],
+      ["Major completion", { f: `IFERROR(COUNTIFS(${DR}!B:B,"Major*",${DR}!G:G,1)/COUNTIF(${DR}!B:B,"Major*"),0)`, v: majorItems.length ? majorDone / majorItems.length : 0 }, bar2("B7", majorItems.length ? majorDone / majorItems.length : 0)],
+      ["Minor completion", { f: `IFERROR(COUNTIFS(${DR}!B:B,"Minor",${DR}!G:G,1)/COUNTIF(${DR}!B:B,"Minor"),"No minor")`, v: hasMinor ? 0 : "No minor" }, bar2("B8", hasMinor ? 0 : null)],
+      ["General education and open electives", { f: `IFERROR(SUMIFS(${RM}!D:D,${RM}!E:E,"${CAT.CORE}",${RM}!G:G,"Completed")/SUMIFS(${RM}!D:D,${RM}!E:E,"${CAT.CORE}"),0)`, v: 0 }, bar2("B9", 0)],
+      ["Overall graduation progress", { f: "B5/B4", v: earned0 / P.gradU }, bar2("B10", earned0 / P.gradU)],
+      ["Projected graduation date", P.grad, null],
+    ];
+    prog.forEach(([l, v, p], i) => {
+      const rr = 4 + i, pct = [6, 7, 8, 9].includes(i);
+      g.set(rr, 1, l, lab); g.set(rr, 2, v, { bd: 1, h: "left", b: 1, fmt: pct ? "0%" : "0" }); g.set(rr, 3, p || "", { bd: 1, color: "A6212D", b: 1 });
+    });
+    g.set(13, 1, "These figures update as you change Status on the Academic Roadmap sheet.", { i: 1, color: "566879" });
+    return b.build();
+  }
+  const bar = (v) => "█".repeat(Math.round(v * 10)) + "░".repeat(10 - Math.round(v * 10));
+
+  $("dlBtn").addEventListener("click", async () => {
+    const msg = $("dlMsg"); msg.textContent = "";
+    if (typeof JSZip === "undefined") { msg.textContent = "The Excel library didn't load. Check your connection and refresh the page."; return; }
+    try {
+      const blob = await buildWorkbook();
+      const fn = "Academic_Roadmap_" + S.name.replace(/[^\w]+/g, "_").replace(/^_|_$/g, "") + ".xlsx";
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      msg.textContent = "Your roadmap is downloading. Open it in Excel to edit it.";
+    } catch (e) { msg.textContent = "We couldn't create the file this time. Please try again."; }
+  });
+  window.__plan = { buildPlan, buildWorkbook, S };
+})();
+</script>
+</body>
+</html>
